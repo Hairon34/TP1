@@ -1,0 +1,62 @@
+import socket
+import hashlib
+import getpass
+
+def hash_password(password):
+    """Retourne le hash SHA-1 du mot de passe."""
+    return hashlib.sha1(password.encode()).hexdigest()
+
+def main():
+    SERVER_IP = "10.205.0.156"  # Remplace par l'IP de ton serveur
+    SERVER_PORT = 4567
+
+    #  Connexion au serveur
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket.connect((SERVER_IP, SERVER_PORT))
+    
+    local_address = client_socket.getsockname()
+    remote_address = (SERVER_IP, SERVER_PORT)
+    
+    print(f"Adresse locale (source) : {local_address}")
+    print(f"Adresse serveur (destination) : {remote_address}")
+
+    #  Récupération du challenge du serveur
+    challenge_message = client_socket.recv(1024).decode().strip()
+    print(f"Serveur: {challenge_message}")
+
+    if not challenge_message.startswith("Server CHALL"):
+        print("Erreur : Challenge non reçu correctement ! Fermeture du client.")
+        client_socket.close()
+        return
+
+    challenge = challenge_message.split(" ")[-1]
+    print(f"Challenge reçu : {challenge}")
+
+    # Demander les identifiants
+    username = input("Nom d'utilisateur : ")
+    password = getpass.getpass("Mot de passe (caché) : ")
+
+    print("Mot de passe saisi !")  # Debug pour voir si on continue bien
+
+    # Calcul du hash SHA-1 du mot de passe
+    hashed_pwd = hash_password(password)
+    print(f"SHA-1(password) = {hashed_pwd}")  # Debug
+
+    # Création du hash sécurisé SHA-256(challenge + SHA-1(password))
+    pwdhash = hashlib.sha256((challenge + hashed_pwd).encode()).hexdigest()
+    print(f"SHA-256(challenge + password) = {pwdhash}")  # Debug
+
+    # Envoi des identifiants séparés par un délimiteur (`:`)
+    message_to_send = f"{username}:{pwdhash}\n"
+    client_socket.sendall(message_to_send.encode())
+
+    print("Identifiants envoyés !")  # Vérification de l'envoi
+
+    # Réception de la réponse du serveur
+    response = client_socket.recv(1024).decode().strip()
+    print(f"Réponse du serveur: {response}")
+
+    client_socket.close()
+
+if __name__ == "__main__":
+    main()
