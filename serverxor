@@ -1,0 +1,76 @@
+import socket
+import hashlib
+
+def generate_challenge():
+    """Génère un challenge aléatoire pour le client."""
+    return hashlib.md5(str(hash("randomchallenge")).encode()).hexdigest()
+
+def handle_client(client_socket, address):
+    """Gère la connexion avec un client et vérifie les identifiants."""
+    print(f"Connexion de {address}")
+
+    # Envoi du challenge au client
+    challenge = generate_challenge()
+    print(f"Challenge envoyé au client : {challenge}")
+    client_socket.sendall(f"Server CHALL {challenge}\n".encode())
+
+    # Réception des identifiants
+    try:
+        data = client_socket.recv(1024).decode().strip()
+        print(f"Identifiants reçus : {data}")  # Debug
+
+        if not data:
+            print("Erreur : Pas d'identifiants reçus, fermeture de la connexion.")
+            client_socket.close()
+            return
+
+        # Séparer le nom d'utilisateur et le hash du mot de passe
+        username, pwdhash = data.split(":")
+        print(f"Username reçu : '{username}'")
+        print(f"PWDHASH reçu : '{pwdhash}'")
+
+        # Vérification dans `users.txt`
+        with open("users.txt", "r") as file:
+            users = {line.split(":")[0]: line.split(":")[1].strip() for line in file}
+
+        # Vérifier si l'utilisateur existe
+        if username in users:
+            # Hash du mot de passe de l'utilisateur avec SHA-1
+            user_password_sha1 = hashlib.sha1(users[username].encode()).hexdigest()
+            print(f"Mot de passe SHA-1 de l'utilisateur : {user_password_sha1}")
+
+            # Hash attendu (SHA-256(challenge + SHA-1(password)))
+            expected_hash = hashlib.sha256((challenge + user_password_sha1).encode()).hexdigest()
+            print(f"Hash attendu : {expected_hash}")  # Debug
+
+            if pwdhash == expected_hash:
+                print("Authentification réussie !")
+                client_socket.sendall(b"Auth OK\n")
+            else:
+                print(f"Mot de passe incorrect.\nPWDHASH: {pwdhash} - Expected hash: {expected_hash}")
+                client_socket.sendall(b"Auth Failed\n")
+        else:
+            print("Utilisateur inconnu.")
+            client_socket.sendall(b"User Not Found\n")
+
+    except Exception as e:
+        print(f"Erreur lors du traitement du client : {e}")
+
+    finally:
+        client_socket.close()
+
+def start_server():
+    """Démarre le serveur et attend les connexions des clients."""
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind(('0.0.0.0', 4567))
+    server_socket.listen(5)
+    print("Serveur en écoute sur 0.0.0.0:4567")
+
+    while True:
+        # Accepter la connexion d'un client
+        client_socket, client_address = server_socket.accept()
+        print(f"Connexion de {client_address}")
+        handle_client(client_socket, client_address)
+
+if __name__ == "__main__":
+    start_server()
